@@ -23,24 +23,32 @@ pub fn type_string(string: &U16String) -> WinResult<()> {
     let js = build_js_command(&text);
     let js_utf16: Vec<u16> = js.encode_utf16().collect();
 
+    // Give the user a moment to release the hotkey (e.g. Insert) so it doesn't interfere
+    thread::sleep(Duration::from_millis(300));
+
     // Put the JS command on clipboard
     Clipboard::set_text(&js_utf16)?;
     thread::sleep(Duration::from_millis(100));
 
     // Open Chrome DevTools Console
-    send_input(&ctrl_shift_vk(VK_J))?;
+    press_ctrl_shift(VK_J)?;
     thread::sleep(Duration::from_millis(3000));
 
-    // Paste the JS command
-    send_input(&ctrl_vk(VK_V))?;
+    // 1. Type "allow pasting" to unlock (in case it is restricted)
+    type_unicode("allow pasting")?;
+    press_key(VK_RETURN)?;
+    thread::sleep(Duration::from_millis(500));
+
+    // 2. Paste the actual JS command (now guaranteed to be allowed)
+    press_ctrl(VK_V)?;
     thread::sleep(Duration::from_millis(1000));
 
     // Execute
-    send_input(&vk_press(VK_RETURN))?;
+    press_key(VK_RETURN)?;
     thread::sleep(Duration::from_millis(1500));
 
     // Close DevTools
-    send_input(&vk_press(VK_F12))?;
+    press_key(VK_F12)?;
     thread::sleep(Duration::from_millis(500));
 
     // Restore original clipboard
@@ -89,28 +97,33 @@ fn send_input(inputs: &[INPUT]) -> WinResult<()> {
     Ok(())
 }
 
-fn vk_press(vk: VIRTUAL_KEY) -> [INPUT; 2] {
-    [make_vk_input(vk, true), make_vk_input(vk, false)]
+fn press_key(vk: VIRTUAL_KEY) -> WinResult<()> {
+    send_input(&[make_vk_input(vk, true)])?;
+    thread::sleep(Duration::from_millis(20));
+    send_input(&[make_vk_input(vk, false)])?;
+    Ok(())
 }
 
-fn ctrl_vk(vk: VIRTUAL_KEY) -> [INPUT; 4] {
-    [
-        make_vk_input(VK_CONTROL, true),
-        make_vk_input(vk, true),
-        make_vk_input(vk, false),
-        make_vk_input(VK_CONTROL, false),
-    ]
+fn press_ctrl(vk: VIRTUAL_KEY) -> WinResult<()> {
+    send_input(&[make_vk_input(VK_CONTROL, true)])?;
+    thread::sleep(Duration::from_millis(20));
+    send_input(&[make_vk_input(vk, true)])?;
+    thread::sleep(Duration::from_millis(20));
+    send_input(&[make_vk_input(vk, false)])?;
+    thread::sleep(Duration::from_millis(20));
+    send_input(&[make_vk_input(VK_CONTROL, false)])?;
+    Ok(())
 }
 
-fn ctrl_shift_vk(vk: VIRTUAL_KEY) -> [INPUT; 6] {
-    [
-        make_vk_input(VK_CONTROL, true),
-        make_vk_input(VK_SHIFT, true),
-        make_vk_input(vk, true),
-        make_vk_input(vk, false),
-        make_vk_input(VK_SHIFT, false),
-        make_vk_input(VK_CONTROL, false),
-    ]
+fn press_ctrl_shift(vk: VIRTUAL_KEY) -> WinResult<()> {
+    send_input(&[make_vk_input(VK_CONTROL, true), make_vk_input(VK_SHIFT, true)])?;
+    thread::sleep(Duration::from_millis(20));
+    send_input(&[make_vk_input(vk, true)])?;
+    thread::sleep(Duration::from_millis(20));
+    send_input(&[make_vk_input(vk, false)])?;
+    thread::sleep(Duration::from_millis(20));
+    send_input(&[make_vk_input(VK_SHIFT, false), make_vk_input(VK_CONTROL, false)])?;
+    Ok(())
 }
 
 const fn make_vk_input(vk: VIRTUAL_KEY, pressed: bool) -> INPUT {
@@ -123,6 +136,34 @@ const fn make_vk_input(vk: VIRTUAL_KEY, pressed: bool) -> INPUT {
                 dwFlags: match pressed {
                     true => 0,
                     false => KEYEVENTF_KEYUP,
+                },
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    }
+}
+
+fn type_unicode(text: &str) -> WinResult<()> {
+    for c in text.encode_utf16() {
+        send_input(&[make_unicode_input(c, true)])?;
+        thread::sleep(Duration::from_millis(20));
+        send_input(&[make_unicode_input(c, false)])?;
+        thread::sleep(Duration::from_millis(20));
+    }
+    Ok(())
+}
+
+const fn make_unicode_input(c: u16, pressed: bool) -> INPUT {
+    INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: 0,
+                wScan: c,
+                dwFlags: match pressed {
+                    true => KEYEVENTF_UNICODE,
+                    false => KEYEVENTF_UNICODE | KEYEVENTF_KEYUP,
                 },
                 time: 0,
                 dwExtraInfo: 0,

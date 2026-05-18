@@ -12,12 +12,14 @@ Instead of simulating raw key presses character-by-character, `clipboard-typer` 
 
 1. You copy your source code to the clipboard.
 2. When you hit the `Insert` hotkey, the program:
+   - Waits briefly to ensure your physical key release doesn't interfere with automation.
    - Swaps your clipboard with a short JavaScript snippet specifically designed for the target editor instance (Ace, Monaco, or CodeMirror).
    - Opens the Chrome DevTools Console (`Ctrl` + `Shift` + `J`).
+   - Automatically bypasses Chrome's DevTools Self-XSS protection by explicitly typing `"allow pasting"` and hitting `Enter`.
    - Pastes the JavaScript command.
-   - Restores your original codebase back to the clipboard.
-   - Executes the script (`Enter`), which safely reads the clipboard and updates the editor natively.
+   - Executes the script (`Enter`), which safely updates the editor natively.
    - Closes the DevTools Console (`F12`).
+   - Restores your original codebase back to the clipboard.
 
 Because the code is inserted atomically via the editor's native API (`setValue()`), formatting remains 100% accurate.
 
