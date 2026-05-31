@@ -32,7 +32,7 @@ pub fn type_string(string: &U16String) -> WinResult<()> {
 
     // Open Chrome DevTools Console
     press_ctrl_shift(VK_J)?;
-    thread::sleep(Duration::from_millis(3000));
+    thread::sleep(Duration::from_millis(4000));
 
     // 1. Type "allow pasting" to unlock (in case it is restricted)
     type_unicode("allow pasting")?;
@@ -58,31 +58,19 @@ pub fn type_string(string: &U16String) -> WinResult<()> {
 }
 
 /// Build a universal JS command that tries Ace → Monaco → CodeMirror.
-/// Uses a template literal (backtick string) to preserve multi-line formatting.
+/// It inserts at the current cursor position instead of replacing the entire file.
+/// We use URL encoding to ensure the payload is a single line, minimizing damage if pasted normally.
 fn build_js_command(text: &str) -> String {
-    // Escape for JS template literal
-    let escaped = text
-        .replace('\\', "\\\\")
-        .replace('`', "\\`")
-        .replace("${", "\\${");
-
-    // Universal editor detection: Ace, Monaco, CodeMirror
-    // Ace: document.querySelector('.ace_editor').env.editor.setValue(text, -1)
-    // Monaco: monaco.editor.getModels()[0].setValue(text)
-    // CodeMirror: document.querySelector('.CodeMirror').CodeMirror.setValue(text)
+    let encoded = urlencoding::encode(text);
+    
+    // Minified JS to:
+    // 1. Decode the text
+    // 2. Try Ace Editor (insert at cursor)
+    // 3. Try Monaco Editor (executeEdits at selection)
+    // 4. Try CodeMirror (replaceSelection)
     format!(
-        concat!(
-            "(function(){{",
-            "var t=`{0}`;",
-            "var a=document.querySelector('.ace_editor');",
-            "if(a&&a.env&&a.env.editor){{a.env.editor.setValue(t,-1);return}}",
-            "if(typeof monaco!=='undefined'){{monaco.editor.getModels()[0].setValue(t);return}}",
-            "var c=document.querySelector('.CodeMirror');",
-            "if(c&&c.CodeMirror){{c.CodeMirror.setValue(t);return}}",
-            "console.error('No editor found')",
-            "}})()"
-        ),
-        escaped
+        "(function(){{var t=decodeURIComponent(\"{0}\");var a=document.querySelector('.ace_editor');if(a&&a.env&&a.env.editor){{a.env.editor.session.insert(a.env.editor.getCursorPosition(),t);a.env.editor.focus();return}}if(typeof monaco!=='undefined'){{var m=monaco.editor.getEditors()[0];if(m){{m.executeEdits('paste',[{{range:m.getSelection(),text:t,forceMoveMarkers:true}}]);m.focus();return}}var mod=monaco.editor.getModels()[0];if(mod){{mod.setValue(t);return}}}}var c=document.querySelector('.CodeMirror');if(c&&c.CodeMirror){{c.CodeMirror.replaceSelection(t);c.CodeMirror.focus();return}}console.error('No editor found')}})()",
+        encoded
     )
 }
 
